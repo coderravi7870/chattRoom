@@ -1,21 +1,74 @@
-const app = require("express")();
+const express = require("express");
+const http = require("http");
+const dotenv = require("dotenv");
+const cookieParser = require("cookie-parser");
+const cors = require("cors");
+const socketIO = require("socket.io");
+const connectinDatabase = require("./halper/db");
+const ChatMessage = require("./model/chatModel");
+dotenv.config();
 
-const server = require("http").createServer(app);
+const app = express();
+app.use(express.json());
+app.use(cookieParser());
+app.use(
+  cors({
+    origin: "http://localhost:5173",
+    credentials: true,
+  })
+);
 
-const io = require("socket.io")(server,{
-    cors: {
-        origin: "*",
-      }
+const server = http.createServer(app);
+const io = socketIO(server, {
+  cors: {
+    origin: "*", // Allow CORS
+  },
 });
 
-io.on("connection",(socket)=>{
-    socket.on("chat",(payload)=>{
-        io.emit("chat",payload);
+// data base
+connectinDatabase();
+
+// Handle socket connections
+io.on("connection", (socket) => {
+  // Send chat history to the new user when they connect
+  ChatMessage.find()
+    .sort({ timestamp: 1 }) // Sort by oldest message first
+    .limit(100) // Limit to 100 messages
+    .then((messages) => {
+      socket.emit("chatHistory", messages); // Emit history to the new client
     })
-})
+    .catch((err) => {
+      console.log("Error fetching chat history: ", err);
+    });
 
+  // When a new message is received
+  socket.on("chat", (payload) => {
+    const newMessage = new ChatMessage(payload);
 
-server.listen(5000 , ()=>{
-    console.log("Server is listening on port 5000 ......");
-    
-})
+    // Save the new message to the database
+    newMessage
+      .save()
+      .then(() => {
+        io.emit("chat", payload);
+      })
+      .catch((err) => {
+        console.log("Error saving message: ", err);
+      });
+  });
+
+  
+});
+
+const userRoute = require("./routes/userRouter");
+const messageRoute = require("./routes/messageRouter");
+
+app.use("/user", userRoute);
+app.use("/message", messageRoute);
+// Start server and listen on port 5000
+server.listen(process.env.PORT, async () => {
+  try {
+    console.log(`Running on server ${process.env.PORT}`);
+  } catch (ex) {
+    console.log(ex);
+  }
+});
