@@ -13,7 +13,7 @@ app.use(express.json());
 app.use(cookieParser());
 app.use(
   cors({
-    origin: "http://localhost:5173",
+    origin: "https://sparkling-sunflower-b052d2.netlify.app",
     credentials: true,
   })
 );
